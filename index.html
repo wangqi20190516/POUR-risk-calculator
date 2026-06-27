@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Experimental dual-model calculator for early re-catheterization-defined POUR</title>
+<style>
+  :root {
+    --blue: #1f4e79;
+    --red: #8b1e2d;
+    --ink: #1f2933;
+    --muted: #5b6770;
+    --line: #d7dde3;
+    --panel: #f8fafc;
+    --warning-bg: #fff4ce;
+    --warning-border: #e3b341;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #ffffff; color: var(--ink); font-family: Arial, Helvetica, sans-serif; line-height: 1.45; }
+  .page { width: min(1180px, calc(100% - 48px)); margin: 32px auto 40px; }
+  header { border-bottom: 2px solid var(--blue); padding-bottom: 18px; margin-bottom: 18px; }
+  h1 { margin: 0 0 12px; font-size: 30px; color: #0f2f4f; }
+  .warning { border: 1px solid var(--warning-border); background: var(--warning-bg); padding: 12px 14px; font-weight: 700; color: #4d3800; border-radius: 6px; }
+  section { margin-top: 22px; }
+  h2 { margin: 0 0 12px; font-size: 19px; color: var(--blue); }
+  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; border: 1px solid var(--line); background: var(--panel); padding: 18px; border-radius: 8px; }
+  .field span { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  input, select { width: 100%; min-height: 40px; border: 1px solid #aab4be; border-radius: 5px; padding: 8px 10px; font-size: 15px; background: white; }
+  .button-row { display: flex; gap: 12px; align-items: center; margin: 22px 0 14px; }
+  button { border: 0; background: var(--blue); color: white; padding: 12px 18px; font-size: 16px; font-weight: 700; border-radius: 6px; cursor: pointer; }
+  .results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 12px; }
+  .result-card { border: 2px solid var(--blue); border-radius: 8px; padding: 18px; background: #f7fbff; }
+  .result-card.extended { border-color: var(--red); background: #fff8f8; }
+  .result-card h3 { margin: 0 0 10px; font-size: 18px; }
+  .risk { font-size: 34px; font-weight: 800; margin: 4px 0 4px; }
+  .preop-color { color: var(--blue); }
+  .extended-color { color: var(--red); }
+  .interpretation { margin-top: 12px; color: var(--muted); font-size: 14px; }
+  footer { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 13px; }
+  @media (max-width: 760px) { .form-grid, .results { grid-template-columns: 1fr; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <h1>Experimental dual-model risk calculator for early re-catheterization-defined POUR</h1>
+    <div class="warning">This calculator is for research demonstration only and has not been externally validated. External validation is required before clinical use.</div>
+  </header>
+
+  <section>
+    <h2>Preoperative variables</h2>
+    <div class="form-grid">
+      <label class="field" for="age"><span>Age, years</span><input id="age" name="age" type="number" step="any" value="70"></label>
+      <label class="field" for="bmi"><span>BMI, kg/m²</span><input id="bmi" name="bmi" type="number" step="any" value="24"></label>
+      <label class="field" for="diabetes"><span>Diabetes mellitus</span><select id="diabetes" name="diabetes"><option value="No" selected>No</option><option value="Yes">Yes</option></select></label>
+      <label class="field" for="coronary_heart_disease"><span>Coronary heart disease</span><select id="coronary_heart_disease" name="coronary_heart_disease"><option value="No" selected>No</option><option value="Yes">Yes</option></select></label>
+      <label class="field" for="prior_hysterectomy"><span>Prior hysterectomy</span><select id="prior_hysterectomy" name="prior_hysterectomy"><option value="No" selected>No</option><option value="Yes">Yes</option></select></label>
+      <label class="field" for="preop_emptying_symptom"><span>Any preoperative emptying symptom</span><select id="preop_emptying_symptom" name="preop_emptying_symptom"><option value="No" selected>No</option><option value="Yes">Yes</option></select></label>
+      <label class="field" for="preop_pvr"><span>Preoperative PVR, mL</span><input id="preop_pvr" name="preop_pvr" type="number" step="any" value="0"></label>
+      <label class="field" for="popq_ba"><span>POP-Q Ba, cm</span><input id="popq_ba" name="popq_ba" type="number" step="any" value="4"></label>
+      <label class="field" for="popq_c"><span>POP-Q C, cm</span><input id="popq_c" name="popq_c" type="number" step="any" value="2"></label>
+      <label class="field" for="urethral_rotation_angle"><span>Urethral rotation angle, degrees</span><input id="urethral_rotation_angle" name="urethral_rotation_angle" type="number" step="any" value="60"></label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Additional perioperative variables</h2>
+    <div class="form-grid">
+      <label class="field" for="colpocleisis_type"><span>Type of colpocleisis</span><select id="colpocleisis_type" name="colpocleisis_type"><option value="Modified colpocleisis" selected>Modified colpocleisis</option><option value="Partial colpocleisis">Partial colpocleisis</option></select></label>
+      <label class="field" for="concomitant_hysterectomy"><span>Concomitant hysterectomy</span><select id="concomitant_hysterectomy" name="concomitant_hysterectomy"><option value="No" selected>No</option><option value="Yes">Yes</option></select></label>
+      <label class="field" for="operative_time_min"><span>Operative time, min</span><input id="operative_time_min" name="operative_time_min" type="number" step="any" value="90"></label>
+      <label class="field" for="blood_loss_ml"><span>Estimated blood loss, mL</span><input id="blood_loss_ml" name="blood_loss_ml" type="number" step="any" value="50"></label>
+      <label class="field" for="time_to_first_catheter_removal"><span>Time to first catheter removal, days</span><input id="time_to_first_catheter_removal" name="time_to_first_catheter_removal" type="number" step="any" value="3"></label>
+    </div>
+  </section>
+
+  <section>
+    <div class="button-row"><button type="button" onclick="calculateRisks()">Calculate predicted risks</button></div>
+    <h2>Predicted risks</h2>
+    <div class="results">
+      <div class="result-card">
+        <h3>Preoperative ridge model</h3>
+        <p>Predicted probability of early re-catheterization-defined POUR:</p>
+        <div id="preopRisk" class="risk preop-color">--.-%</div>
+      </div>
+      <div class="result-card extended">
+        <h3>Extended perioperative ridge model</h3>
+        <p>Predicted probability of early re-catheterization-defined POUR:</p>
+        <div id="extendedRisk" class="risk extended-color">--.-%</div>
+      </div>
+    </div>
+    <p class="interpretation">The preoperative model uses variables available before surgery, whereas the extended perioperative model additionally incorporates operative and catheter-management variables available before first catheter removal.</p>
+  </section>
+
+  <footer>
+    The calculator uses averaged ridge penalized logistic regression coefficients across 20 multiply imputed datasets. Continuous variables are entered in their original units. Binary variables are coded as Yes = 1 and No = 0. Procedure type is coded as Partial colpocleisis = 1 and Modified colpocleisis = 0. Ridge coefficients are prediction weights and should not be interpreted as independent risk-factor estimates.
+  </footer>
+</main>
+
+<script>
+const coefficients = {
+  preoperative: {
+    "(Intercept)": -2.187460898484,
+    "age": 0.019367036001,
+    "bmi": -0.090934881724,
+    "coronary_heart_diseaseYes": -0.452081938089,
+    "diabetesYes": 0.454131965200,
+    "popq_ba": -0.023204341422,
+    "popq_c": -0.074837965798,
+    "preop_emptying_symptomYes": 0.325447612109,
+    "preop_pvr": -0.002516243600,
+    "prior_hysterectomyYes": -0.437690069884,
+    "urethral_rotation_angle": 0.005205196550
+  },
+  extended: {
+    "(Intercept)": -3.020734923870,
+    "age": 0.027190993265,
+    "blood_loss_ml": 0.007781158890,
+    "bmi": -0.115097792120,
+    "colpocleisis_typePartial colpocleisis": -0.743712167613,
+    "concomitant_hysterectomyYes": 0.634873671603,
+    "coronary_heart_diseaseYes": -0.478002223255,
+    "diabetesYes": 0.527182726529,
+    "operative_time_min": -0.000529695767,
+    "popq_ba": -0.045533634856,
+    "popq_c": -0.095010467697,
+    "preop_emptying_symptomYes": 0.333970420163,
+    "preop_pvr": -0.002940769467,
+    "prior_hysterectomyYes": -0.021925404381,
+    "time_to_first_catheter_removal": 0.044000190751,
+    "urethral_rotation_angle": 0.005406398491
+  }
+};
+function num(id) { const value = Number(document.getElementById(id).value); return Number.isFinite(value) ? value : 0; }
+function yes(id) { return document.getElementById(id).value === "Yes" ? 1 : 0; }
+function partialColpocleisis() { return document.getElementById("colpocleisis_type").value === "Partial colpocleisis" ? 1 : 0; }
+function logistic(lp) { return 1 / (1 + Math.exp(-lp)); }
+function commonValues() { return { age: num("age"), bmi: num("bmi"), diabetesYes: yes("diabetes"), coronary_heart_diseaseYes: yes("coronary_heart_disease"), prior_hysterectomyYes: yes("prior_hysterectomy"), preop_emptying_symptomYes: yes("preop_emptying_symptom"), preop_pvr: num("preop_pvr"), popq_ba: num("popq_ba"), popq_c: num("popq_c"), urethral_rotation_angle: num("urethral_rotation_angle") }; }
+function linearPredictor(c, includePerioperative) {
+  const x = commonValues();
+  let lp = c["(Intercept)"] + c.age*x.age + c.bmi*x.bmi + c.diabetesYes*x.diabetesYes + c.coronary_heart_diseaseYes*x.coronary_heart_diseaseYes + c.prior_hysterectomyYes*x.prior_hysterectomyYes + c.preop_emptying_symptomYes*x.preop_emptying_symptomYes + c.preop_pvr*x.preop_pvr + c.popq_ba*x.popq_ba + c.popq_c*x.popq_c + c.urethral_rotation_angle*x.urethral_rotation_angle;
+  if (includePerioperative) { lp += c["colpocleisis_typePartial colpocleisis"]*partialColpocleisis() + c.concomitant_hysterectomyYes*yes("concomitant_hysterectomy") + c.operative_time_min*num("operative_time_min") + c.blood_loss_ml*num("blood_loss_ml") + c.time_to_first_catheter_removal*num("time_to_first_catheter_removal"); }
+  return lp;
+}
+function preoperativeRisk() { return logistic(linearPredictor(coefficients.preoperative, false)); }
+function extendedRisk() { return logistic(linearPredictor(coefficients.extended, true)); }
+function percent(value) { return (value * 100).toFixed(1) + "%"; }
+function calculateRisks() { document.getElementById("preopRisk").textContent = percent(preoperativeRisk()); document.getElementById("extendedRisk").textContent = percent(extendedRisk()); }
+window.addEventListener("load", calculateRisks);
+</script>
+</body>
+</html>
