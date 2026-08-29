@@ -1,5 +1,7 @@
-# POUR Risk Calculator
+POUR Risk Calculator
 
-Experimental dual-model risk calculator for early re-catheterization-defined postoperative urinary retention after colpocleisis.
+Dual-timepoint risk calculator for early re-catheterization-defined postoperative urinary retention after colpocleisis.
 
-This webpage is provided for research demonstration only. The model has not been externally validated and should not be used for clinical decision-making.
+The calculator implements two internally validated multivariable logistic regression models: a preoperative model and an updated pre-catheter-removal model.
+
+The models have undergone internal bootstrap validation but have not yet been externally validated. This tool is intended for research use and should not be used as the sole basis for clinical decision-making.
