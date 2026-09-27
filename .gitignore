@@ -1,0 +1,16 @@
+# Private patient-level data
+data/
+
+# Generated analysis outputs
+outputs/
+
+# Common data/model artifacts
+*.rds
+*.RData
+*.rda
+
+# Local R / OS artifacts
+.Rhistory
+.Rproj.user/
+.DS_Store
+Thumbs.db
