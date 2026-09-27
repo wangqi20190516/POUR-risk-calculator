@@ -1,0 +1,86 @@
+Scientific Reports public-code cleaning audit
+================================================
+
+Source file
+-----------
+POUR_传统Logistic双时间点_v5 2608再启动.R
+
+Public file
+-----------
+POUR_analysis_reproducible_SciRep_v1.R
+
+SHA-256
+-------
+Source: 69a9eb9753af34f7d689d3ad8c1b7dd0856532e22311eca6823d6cebf0fc8c2c
+Public: 96a5a305f7138eed30cb798e641223e0f95fe657b57898d4255a6354c81a684d
+
+Line counts
+-----------
+Source: 15237
+Public: 15297
+
+Approved non-statistical changes
+--------------------------------
+1. Added a public reproducibility header.
+2. Added glmnet to the dependency check.
+3. Replaced automatic package installation with a dependency check.
+4. Replaced hard-coded Windows paths with project-relative paths:
+   data/analysis_dataset.xlsx
+   outputs/
+5. Removed interactive file selection.
+6. Direct identifier/non-model date fields (patient_name, surgery_date),
+   if present, are removed immediately after import and are not required.
+7. Corrected run-information metadata from 10 to 5 CV folds, matching
+   the actual penalized-regression sensitivity analysis.
+8. Corrected screening comments to reflect the actual observed-data
+   between-group P<0.10 route.
+9. Replaced historical Table 2/Table 3 output filenames/comments with
+   content-based labels.
+10. Updated Section 16A publication labels from old Supplementary
+    Tables S1/S2 to current S4/S5.
+11. Added sessionInfo() export.
+12. No patient-level values were inserted into the public code.
+
+Statistical analysis deliberately unchanged
+-------------------------------------------
+- Locked sample checks: N=567; POUR events=50.
+- Predictor definitions and coding.
+- MICE m=20, maxit=20, imputation methods, predictor matrices and seeds.
+- Observed-data between-group screening rule P<0.10.
+- POP-Q Bp route lock.
+- Full and reduced multivariable logistic regression.
+- Rubin pooling.
+- Full-model pooled P<0.05 retention rule.
+- Final-model refitting.
+- Bootstrap B=1000, seed and validation algorithm.
+- ROC/AUC, calibration and decision-curve calculations.
+- Nomogram mathematics.
+- Ridge/Elastic Net/LASSO algorithms, alpha values, 5-fold assignment,
+  lambda.min/lambda.1se rules and seeds.
+- No model coefficient or manuscript numerical result was manually edited.
+
+Automated QC
+------------
+{
+  "absolute_D_drive_paths": 0,
+  "interactive_file_choose": 0,
+  "automatic_install_packages": 0,
+  "patient_name_occurrences": 1,
+  "surgery_date_occurrences": 1,
+  "cross_validation_folds_10": 0,
+  "cross_validation_folds_5": 1,
+  "glmnet_dependency_present": true,
+  "sessionInfo_export_present": true,
+  "old_penalized_S1_S2_filename_present": false,
+  "current_penalized_S4_S5_filename_present": true
+}
+
+Diff
+----
+A full unified diff is supplied as:
+POUR_analysis_reproducible_SciRep_v1_FULL_DIFF.txt
+
+Privacy
+-------
+The public script does not include patient-level data. Do not commit the real
+analysis dataset or the generated outputs directory to a public repository.

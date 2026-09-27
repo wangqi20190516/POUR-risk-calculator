@@ -1,0 +1,872 @@
+--- POUR_传统Logistic双时间点_v5 2608再启动.R
++++ POUR_analysis_reproducible_SciRep_v1.R
+@@ -1,3 +1,45 @@
++############################################################
++# PUBLIC REPRODUCIBILITY VERSION
++# Scientific Reports submission support
++#
++# Study:
++# Dual-time-point prediction of early postoperative urinary
++# retention after colpocleisis for advanced pelvic organ prolapse
++#
++# This public script is derived from the locked final analysis
++# script used for the manuscript.
++#
++# PUBLIC-VERSION CHANGES ONLY:
++# 1. Local Windows paths were replaced by project-relative paths.
++# 2. Automatic package installation and interactive file selection
++#    were removed.
++# 3. Direct identifiers/non-model date fields are dropped, if present,
++#    immediately after data import and are not required by the script.
++# 4. glmnet was added to the dependency check because Section 16 uses it.
++# 5. The run-information metadata was corrected to record the actual
++#    5-fold penalized-regression sensitivity analysis.
++# 6. Historical manuscript table/supplement numbering in comments and
++#    output filenames was aligned with the current Scientific Reports
++#    manuscript structure.
++# 7. sessionInfo() is exported at the end for reproducibility.
++#
++# NO statistical algorithm, analysis variable, random seed,
++# model-selection rule, bootstrap procedure, regression coefficient,
++# or numerical calculation was intentionally changed.
++#
++# DATA:
++# Place a de-identified analysis file named:
++#     data/analysis_dataset.xlsx
++# with worksheet:
++#     Sheet1
++# in the repository/project root before running this script.
++#
++# IMPORTANT:
++# The repository should NOT contain the real patient-level dataset or
++# the generated outputs/ directory. Those materials may contain
++# sensitive clinical information.
++############################################################
++
+ 
+ 
+ ############################################################
+@@ -13,7 +55,7 @@
+ 
+ 
+ ############################################################
+-# 2. 安装并加载 R 包
++# 2. 检查并加载 R 包
+ ############################################################
+ 
+ packages <- c(
+@@ -26,17 +68,26 @@
+   "pROC",
+   "car",
+   "rms",
+-  "ResourceSelection"
+-)
+-
+-new_packages <- packages[
+-  !(packages %in% installed.packages()[, "Package"])
++  "ResourceSelection",
++  "glmnet"
++)
++
++missing_packages <- packages[
++  !vapply(
++    packages,
++    requireNamespace,
++    logical(1),
++    quietly = TRUE
++  )
+ ]
+ 
+-if (length(new_packages) > 0) {
+-  install.packages(
+-    new_packages,
+-    dependencies = TRUE
++if (length(missing_packages) > 0) {
++  stop(
++    paste0(
++      "Missing required R packages: ",
++      paste(missing_packages, collapse = ", "),
++      ". Install them before running the analysis."
++    )
+   )
+ }
+ 
+@@ -54,37 +105,43 @@
+ ############################################################
+ 
+ # ----------------------------------------------------------
+-# 3.1 正式R分析数据库
+-# ----------------------------------------------------------
+-
+-data_file <- paste0(
+-  "D:/转移文件/医学文献/妇产科文献/论文发表立项/",
+-  "新研发中心/桌面文件 0803/术后尿潴留 新/",
+-  "最终实际运行版.xlsx"
++# 3.1 De-identified analysis database (project-relative path)
++# ----------------------------------------------------------
++
++project_root <- normalizePath(
++  ".",
++  winslash = "/",
++  mustWork = TRUE
++)
++
++data_file <- file.path(
++  project_root,
++  "data",
++  "analysis_dataset.xlsx"
+ )
+ 
+ data_sheet <- "Sheet1"
+ 
+ 
+ # ----------------------------------------------------------
+-# 3.2 所有分析结果的总保存目录
+-# ----------------------------------------------------------
+-
+-output_base <- paste0(
+-  "D:/转移文件/医学文献/妇产科文献/论文发表立项/",
+-  "新研发中心/桌面文件 0803/术后尿潴留 新/",
+-  "模型调试"
+-)
+-
+-
+-# 如果预设数据库不存在，则手动选择文件
++# 3.2 Output directory (project-relative path)
++# ----------------------------------------------------------
++
++output_base <- file.path(
++  project_root,
++  "outputs"
++)
++
+ if (!file.exists(data_file)) {
+-  message("预设 Excel 文件不存在，请手动选择最终实际运行版.xlsx")
+-  data_file <- file.choose()
+-}
+-
+-
+-# 如果总输出目录不存在，则自动创建
++  stop(
++    paste0(
++      "Cannot find the de-identified analysis dataset at: ",
++      data_file,
++      "\nPlace analysis_dataset.xlsx in the data/ directory."
++    )
++  )
++}
++
+ if (!dir.exists(output_base)) {
+   dir.create(
+     output_base,
+@@ -178,18 +235,18 @@
+ 
+ run_info <- data.frame(
+   run_timestamp = run_timestamp,
+-  input_file = normalizePath(
+-    data_file,
+-    winslash = "/"
++  input_file = file.path(
++    "data",
++    "analysis_dataset.xlsx"
+   ),
+   data_sheet = data_sheet,
+-  output_dir = normalizePath(
+-    output_dir,
+-    winslash = "/"
++  output_dir = file.path(
++    "outputs",
++    basename(output_dir)
+   ),
+   univariable_cutoff = 0.10,
+   multivariable_cutoff = 0.05,
+-  cross_validation_folds = 10,
++  cross_validation_folds = 5,
+   stringsAsFactors = FALSE
+ )
+ 
+@@ -220,7 +277,12 @@
+ 
+ # 以下变量仅用于病例识别或时间标记，不进入任何预测模型
+ non_model_vars <- c(
+-  "patient_id",
++  "patient_id"
++)
++
++# Direct identifiers and non-model dates are not required for analysis.
++# If present in an authorized source file, remove them immediately after import.
++privacy_columns_to_drop <- c(
+   "patient_name",
+   "surgery_date"
+ )
+@@ -229,11 +291,10 @@
+ # ----------------------------------------------------------
+ # 4.1 术前时间点允许考虑的全部预测变量
+ #
+-# 所有变量均可进入：
+-# 1. Table 1 描述性/组间单因素比较
+-# 2. 单因素 Logistic 回归
++# 所有变量均进入描述性/组间单因素比较。
+ #
+-# 是否进入后续多因素模型，由单因素 P < 0.10 决定。
++# 是否进入后续多因素模型，由 observed-data
++# between-group comparison P < 0.10 决定。
+ #
+ # 注意：
+ # 术前模型不得纳入任何术中或拔管前变量。
+@@ -667,6 +728,23 @@
+ )
+ 
+ 
++privacy_columns_present <- intersect(
++  privacy_columns_to_drop,
++  names(analysis_data)
++)
++
++if (length(privacy_columns_present) > 0) {
++  analysis_data <- analysis_data[
++    ,
++    setdiff(
++      names(analysis_data),
++      privacy_columns_present
++    ),
++    drop = FALSE
++  ]
++}
++
++
+ # ----------------------------------------------------------
+ # 6.2 检查数据库字段
+ #
+@@ -1423,8 +1501,6 @@
+ #
+ # 不包含：
+ # patient_id
+-# patient_name
+-# surgery_date
+ # 以及任何术中/拔管前变量
+ # ----------------------------------------------------------
+ 
+@@ -2256,7 +2332,7 @@
+ # 9.8 保存正式Table 1
+ file_table1 <- file.path(
+   table_dir,
+-  "Table1_baseline_summary.xlsx"
++  "Complete_cohort_characteristics.xlsx"
+ )
+ 
+ openxlsx::write.xlsx(
+@@ -2272,7 +2348,7 @@
+ # 9.9 保存P值筛选表
+ file_screen <- file.path(
+   table_dir,
+-  "Table1_screening_P_values.xlsx"
++  "Univariable_screening_P_values.xlsx"
+ )
+ 
+ openxlsx::write.xlsx(
+@@ -2288,7 +2364,7 @@
+ # 9.10 保存统计方法审计表
+ file_audit <- file.path(
+   log_dir,
+-  "Table1_statistical_method_audit.xlsx"
++  "Cohort_characteristics_statistical_method_audit.xlsx"
+ )
+ 
+ openxlsx::write.xlsx(
+@@ -3188,7 +3264,7 @@
+ ############################################################
+ ############################################################
+ ############################################################
+-# 12. 最终多因素 Logistic 模型筛选、Table 2及表观性能
++# 12. 最终多因素 Logistic 模型筛选、完整/最终模型输出及表观性能
+ #
+ # 已完成的前置裁决：
+ # 1. Table 1 中 P < 0.10 形成候选变量池；
+@@ -3199,7 +3275,7 @@
+ #    β、SE、P值和95%CI使用Rubin's rules合并；
+ # 5. 当前候选变量全部为1自由度变量，
+ #    因此完整模型中 pooled P < 0.05 的变量进入最终模型；
+-# 6. 最终模型重新拟合后生成正式 Table 2；
++# 6. 最终模型重新拟合后生成完整/最终多因素模型输出；
+ # 7. 同时输出表观AUC、Brier、Scaled Brier/IPA、Log loss、AIC/BIC。
+ ############################################################
+ 
+@@ -4786,9 +4862,9 @@
+ 
+ 
+ # ----------------------------------------------------------
+-# 12.11 生成正式 Table 2
++# 12.11 生成完整/最终多因素模型输出
+ #
+-# Table 2展示完整多因素模型中的全部候选变量，
++# 输出表展示完整多因素模型中的全部候选变量，
+ # 即所有由Table 1中P < 0.10进入多因素分析的变量。
+ #
+ # 同时标记：
+@@ -4797,7 +4873,7 @@
+ #
+ # 对最终保留变量，再额外给出重新拟合最终模型后的参数。
+ #
+-# 这样Table 2既展示完整排除过程，
++# 这样输出表既展示完整排除过程，
+ # 又保留最终模型真正用于Nomogram和风险计算的系数。
+ # ----------------------------------------------------------
+ 
+@@ -4866,7 +4942,7 @@
+     stop(
+       paste0(
+         timepoint,
+-        " Table 2中存在无法匹配的变量筛选状态。"
++        " 多因素模型输出中存在无法匹配的变量筛选状态。"
+       )
+     )
+   }
+@@ -5010,7 +5086,7 @@
+ ) {
+   
+   stop(
+-    "术前Table 2行数与完整模型候选变量数不一致。"
++    "术前多因素模型输出行数与完整模型候选变量数不一致。"
+   )
+ }
+ 
+@@ -5021,7 +5097,7 @@
+ ) {
+   
+   stop(
+-    "拔管前Table 2行数与完整模型候选变量数不一致。"
++    "拔管前多因素模型输出行数与完整模型候选变量数不一致。"
+   )
+ }
+ 
+@@ -5038,7 +5114,7 @@
+ ) {
+   
+   stop(
+-    "术前Table 2最终保留变量数量与最终模型不一致。"
++    "术前多因素模型输出最终保留变量数量与最终模型不一致。"
+   )
+ }
+ 
+@@ -5055,7 +5131,7 @@
+ ) {
+   
+   stop(
+-    "拔管前Table 2最终保留变量数量与最终模型不一致。"
++    "拔管前多因素模型输出最终保留变量数量与最终模型不一致。"
+   )
+ }
+ 
+@@ -5074,7 +5150,7 @@
+ ) {
+   
+   stop(
+-    "术前Table 2中存在最终保留变量但缺少最终模型参数。"
++    "术前多因素模型输出中存在最终保留变量但缺少最终模型参数。"
+   )
+ }
+ 
+@@ -5093,18 +5169,18 @@
+ ) {
+   
+   stop(
+-    "拔管前Table 2中存在最终保留变量但缺少最终模型参数。"
++    "拔管前多因素模型输出中存在最终保留变量但缺少最终模型参数。"
+   )
+ }
+ 
+ 
+ cat(
+-  "12.11 Table 2完整筛选过程质控：通过。\n"
+-)
+-
+-
+-# ----------------------------------------------------------
+-# 12.12 保存正式 Table 2
++  "12.11 多因素模型完整筛选过程质控：通过。\n"
++)
++
++
++# ----------------------------------------------------------
++# 12.12 保存完整/最终多因素模型输出
+ #
+ # Preoperative：全部8个完整模型候选变量
+ # Precatheter：全部11个完整模型候选变量
+@@ -5118,7 +5194,7 @@
+ 
+ table2_file <- file.path(
+   table_dir,
+-  "Table2_multivariable_logistic.xlsx"
++  "Multivariable_logistic_models_full_and_final.xlsx"
+ )
+ 
+ 
+@@ -5139,7 +5215,7 @@
+ # 12.12A 保存最终模型完整参数（含截距）
+ #
+ # 专供后续Nomogram、风险公式和网页计算器使用。
+-# 不取代正式Table 2。
++# 该参数文件供Nomogram、风险公式和网页计算器使用。
+ # ----------------------------------------------------------
+ 
+ final_model_parameter_table <- dplyr::bind_rows(
+@@ -5455,7 +5531,7 @@
+   
+   file.path(
+     table_dir,
+-    "Table2_multivariable_logistic.xlsx"
++    "Multivariable_logistic_models_full_and_final.xlsx"
+   ),
+   
+   file.path(
+@@ -5518,7 +5594,7 @@
+ # ----------------------------------------------------------
+ 
+ cat(
+-  "\n术前 Table 2（完整筛选过程）：\n"
++  "\n术前多因素模型输出（完整筛选过程）：\n"
+ )
+ 
+ print(
+@@ -5527,7 +5603,7 @@
+ 
+ 
+ cat(
+-  "\n拔管前 Table 2（完整筛选过程）：\n"
++  "\n拔管前多因素模型输出（完整筛选过程）：\n"
+ )
+ 
+ print(
+@@ -5560,7 +5636,7 @@
+ 
+ cat(
+   "请重点检查：\n",
+-  "02_tables/Table2_multivariable_logistic.xlsx\n",
++  "02_tables/Multivariable_logistic_models_full_and_final.xlsx\n",
+   "02_tables/Final_model_pooled_coefficients_with_intercept.xlsx\n",
+   "02_tables/Multivariable_model_VIF_summary.xlsx\n",
+   "05_logs/Multivariable_model_QC.xlsx\n",
+@@ -7591,7 +7667,7 @@
+ 
+ 
+ # ==========================================================
+-# 13.8 生成适合论文Table 3的简洁性能表
++# 13.8 生成内部验证简洁性能汇总表
+ # ==========================================================
+ 
+ table3_internal_validation_13 <- data.frame(
+@@ -7677,7 +7753,7 @@
+ 
+ bootstrap_output_file_13 <- file.path(
+   table_dir,
+-  "Table3_bootstrap_internal_validation.xlsx"
++  "Bootstrap_internal_validation_summary.xlsx"
+ )
+ 
+ 
+@@ -7883,7 +7959,7 @@
+ 
+ cat(
+   "\n请重点检查：\n",
+-  "1. 02_tables/Table3_bootstrap_internal_validation.xlsx\n",
++  "1. 02_tables/Bootstrap_internal_validation_summary.xlsx\n",
+   "2. 05_logs/Bootstrap_internal_validation_QC.xlsx\n",
+   "3. 03_models/Bootstrap_internal_validation_objects.rds\n",
+   sep = ""
+@@ -13917,16 +13993,16 @@
+ # 1. DO NOT refit Ridge / Elastic Net / LASSO models.
+ # 2. Read the already locked Section 16 results.
+ # 3. Generate publication-ready supplementary outputs:
+-#      - Supplementary Table S1:
++#      - Supplementary Table S4:
+ #        Cross-validated predictive performance
+-#      - Supplementary Table S2:
++#      - Supplementary Table S5:
+ #        Predictor selection frequency and direction
+ #      - Supplementary Figure S1:
+ #        Selection-frequency heatmap
+ # 4. Figure output: TIFF only, 600 dpi, LZW compression.
+ ############################################################
+ 
+-cat("\n>>> Section 16A started: Supplementary Tables S1-S2 + Figure S1 <<<\n")
++cat("\n>>> Section 16A started: Supplementary Tables S4-S5 + Figure S1 <<<\n")
+ flush.console()
+ 
+ 
+@@ -14135,7 +14211,7 @@
+ 
+ 
+ # ==========================================================
+-# 16A.4 Supplementary Table S1
++# 16A.4 Supplementary Table S4
+ # Cross-validated predictive performance
+ # ==========================================================
+ 
+@@ -14211,7 +14287,7 @@
+ }
+ 
+ 
+-S1_16A <- data.frame(
++S4_16A <- data.frame(
+   `Time point` = ifelse(
+     performance_16A$Timepoint == "Preoperative",
+     "Preoperative",
+@@ -14263,7 +14339,7 @@
+ 
+ 
+ # ==========================================================
+-# 16A.5 Supplementary Table S2
++# 16A.5 Supplementary Table S5
+ # Predictor selection frequency and coefficient direction
+ # ==========================================================
+ 
+@@ -14445,7 +14521,7 @@
+   }
+ }
+ 
+-S2_16A <- do.call(
++S5_16A <- do.call(
+   rbind,
+   S2_list_16A
+ )
+@@ -14852,19 +14928,19 @@
+ 
+ 
+ # ==========================================================
+-# 16A.9 Save Supplementary Tables S1-S2 workbook
++# 16A.9 Save Supplementary Tables S4-S5 workbook
+ # ==========================================================
+ 
+ supplementary_excel_16A <- file.path(
+   table_dir,
+-  "Supplementary_Tables_S1_S2_penalized_regression.xlsx"
++  "Supplementary_Tables_S4_S5_penalized_regression.xlsx"
+ )
+ 
+ 
+ notes_16A <- data.frame(
+   Item = c(
+-    "Table S1 title",
+-    "Table S2 title",
++    "Table S4 title",
++    "Table S5 title",
+     "Figure S1 title",
+     "Internal-validation framework",
+     "Elastic Net alpha",
+@@ -14882,7 +14958,7 @@
+     "0.5",
+     "lambda.min and lambda.1se",
+     "Conventional binary Brier score calculated on out-of-fold predicted probabilities; lower values indicate better overall probabilistic accuracy.",
+-    "Ridge regression retains all candidate predictors and therefore is included in Table S1 for predictive performance but not in Table S2 or Figure S1 for variable-selection frequency.",
++    "Ridge regression retains all candidate predictors and therefore is included in Table S4 for predictive performance but not in Table S5 or Figure S1 for variable-selection frequency.",
+     "Displayed as percentage and selected/evaluated imputations, e.g. 100% (20/20).",
+     "Yes indicates that the predictor was retained in the primary traditional Logistic model."
+   ),
+@@ -14894,12 +14970,12 @@
+ 
+ openxlsx::addWorksheet(
+   wb_16A,
+-  "Table_S1"
++  "Table_S4"
+ )
+ 
+ openxlsx::addWorksheet(
+   wb_16A,
+-  "Table_S2"
++  "Table_S5"
+ )
+ 
+ openxlsx::addWorksheet(
+@@ -14940,36 +15016,36 @@
+ 
+ 
+ # ----------------------------------------------------------
+-# Table S1
++# Table S4
+ # ----------------------------------------------------------
+ 
+ openxlsx::writeData(
+   wb_16A,
+-  "Table_S1",
+-  S1_16A,
++  "Table_S4",
++  S4_16A,
+   headerStyle = header_style_16A
+ )
+ 
+ openxlsx::addStyle(
+   wb_16A,
+-  "Table_S1",
++  "Table_S4",
+   body_style_16A,
+-  rows = 2:(nrow(S1_16A) + 1),
+-  cols = 1:ncol(S1_16A),
++  rows = 2:(nrow(S4_16A) + 1),
++  cols = 1:ncol(S4_16A),
+   gridExpand = TRUE,
+   stack = TRUE
+ )
+ 
+ openxlsx::freezePane(
+   wb_16A,
+-  "Table_S1",
++  "Table_S4",
+   firstRow = TRUE
+ )
+ 
+ openxlsx::setColWidths(
+   wb_16A,
+-  "Table_S1",
+-  cols = 1:ncol(S1_16A),
++  "Table_S4",
++  cols = 1:ncol(S4_16A),
+   widths = c(
+     22,
+     16,
+@@ -14984,17 +15060,17 @@
+   )
+ )
+ 
+-precat_start_S1_16A <- which(
+-  S1_16A$`Time point` == "Pre-catheter-removal"
++precat_start_S4_16A <- which(
++  S4_16A$`Time point` == "Pre-catheter-removal"
+ )[1] + 1
+ 
+-if (is.finite(precat_start_S1_16A)) {
++if (is.finite(precat_start_S4_16A)) {
+   openxlsx::addStyle(
+     wb_16A,
+-    "Table_S1",
++    "Table_S4",
+     section_border_16A,
+-    rows = precat_start_S1_16A,
+-    cols = 1:ncol(S1_16A),
++    rows = precat_start_S4_16A,
++    cols = 1:ncol(S4_16A),
+     gridExpand = TRUE,
+     stack = TRUE
+   )
+@@ -15002,36 +15078,36 @@
+ 
+ 
+ # ----------------------------------------------------------
+-# Table S2
++# Table S5
+ # ----------------------------------------------------------
+ 
+ openxlsx::writeData(
+   wb_16A,
+-  "Table_S2",
+-  S2_16A,
++  "Table_S5",
++  S5_16A,
+   headerStyle = header_style_16A
+ )
+ 
+ openxlsx::addStyle(
+   wb_16A,
+-  "Table_S2",
++  "Table_S5",
+   body_style_16A,
+-  rows = 2:(nrow(S2_16A) + 1),
+-  cols = 1:ncol(S2_16A),
++  rows = 2:(nrow(S5_16A) + 1),
++  cols = 1:ncol(S5_16A),
+   gridExpand = TRUE,
+   stack = TRUE
+ )
+ 
+-primary_rows_S2_16A <- which(
+-  S2_16A$`Primary Logistic predictor` == "Yes"
++primary_rows_S5_16A <- which(
++  S5_16A$`Primary Logistic predictor` == "Yes"
+ ) + 1
+ 
+-if (length(primary_rows_S2_16A) > 0) {
++if (length(primary_rows_S5_16A) > 0) {
+   openxlsx::addStyle(
+     wb_16A,
+-    "Table_S2",
++    "Table_S5",
+     primary_style_16A,
+-    rows = primary_rows_S2_16A,
++    rows = primary_rows_S5_16A,
+     cols = 2,
+     gridExpand = TRUE,
+     stack = TRUE
+@@ -15040,14 +15116,14 @@
+ 
+ openxlsx::freezePane(
+   wb_16A,
+-  "Table_S2",
++  "Table_S5",
+   firstRow = TRUE
+ )
+ 
+ openxlsx::setColWidths(
+   wb_16A,
+-  "Table_S2",
+-  cols = 1:ncol(S2_16A),
++  "Table_S5",
++  cols = 1:ncol(S5_16A),
+   widths = c(
+     22,
+     34,
+@@ -15060,17 +15136,17 @@
+   )
+ )
+ 
+-precat_start_S2_16A <- which(
+-  S2_16A$`Time point` == "Pre-catheter-removal"
++precat_start_S5_16A <- which(
++  S5_16A$`Time point` == "Pre-catheter-removal"
+ )[1] + 1
+ 
+-if (is.finite(precat_start_S2_16A)) {
++if (is.finite(precat_start_S5_16A)) {
+   openxlsx::addStyle(
+     wb_16A,
+-    "Table_S2",
++    "Table_S5",
+     section_border_16A,
+-    rows = precat_start_S2_16A,
+-    cols = 1:ncol(S2_16A),
++    rows = precat_start_S5_16A,
++    cols = 1:ncol(S5_16A),
+     gridExpand = TRUE,
+     stack = TRUE
+   )
+@@ -15115,35 +15191,35 @@
+   overwrite = TRUE
+ )
+ 
+-cat("16A.9 Supplementary Tables S1-S2 workbook saved.\n")
++cat("16A.9 Supplementary Tables S4-S5 workbook saved.\n")
+ 
+ 
+ # ==========================================================
+ # 16A.10 QC
+ # ==========================================================
+ 
+-expected_S1_rows_16A <- 2 * 3 * 2
+-expected_S2_rows_16A <- nrow(candidate_16A)
+-
+-if (nrow(S1_16A) != expected_S1_rows_16A) {
++expected_S4_rows_16A <- 2 * 3 * 2
++expected_S5_rows_16A <- nrow(candidate_16A)
++
++if (nrow(S4_16A) != expected_S4_rows_16A) {
+   warning(
+     paste0(
+-      "Table S1 has ",
+-      nrow(S1_16A),
++      "Table S4 has ",
++      nrow(S4_16A),
+       " rows; expected ",
+-      expected_S1_rows_16A,
++      expected_S4_rows_16A,
+       "."
+     )
+   )
+ }
+ 
+-if (nrow(S2_16A) != expected_S2_rows_16A) {
++if (nrow(S5_16A) != expected_S5_rows_16A) {
+   warning(
+     paste0(
+-      "Table S2 has ",
+-      nrow(S2_16A),
++      "Table S5 has ",
++      nrow(S5_16A),
+       " rows; expected ",
+-      expected_S2_rows_16A,
++      expected_S5_rows_16A,
+       "."
+     )
+   )
+@@ -15183,55 +15259,39 @@
+ }
+ 
+ 
+-cat("\nSupplementary Table S1 preview:\n")
+-print(S1_16A)
+-
+-cat("\nSupplementary Table S2 preview:\n")
+-print(S2_16A)
++cat("\nSupplementary Table S4 preview:\n")
++print(S4_16A)
++
++cat("\nSupplementary Table S5 preview:\n")
++print(S5_16A)
+ 
+ cat(
+   "\n>>> Section 16A completed successfully <<<\n",
+   "Generated files:\n",
+-  "1. 02_tables/Supplementary_Tables_S1_S2_penalized_regression.xlsx\n",
++  "1. 02_tables/Supplementary_Tables_S4_S5_penalized_regression.xlsx\n",
+   "2. 04_figures/Supplementary_Figure_S1_penalized_selection_heatmap.tiff\n",
+   sep = ""
+ )
+ 
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
++############################################################
++# 17. Reproducibility metadata for public code release
++############################################################
++
++reproducibility_metadata_file <- file.path(
++  log_dir,
++  "sessionInfo.txt"
++)
++
++utils::capture.output(
++  sessionInfo(),
++  file = reproducibility_metadata_file
++)
++
++cat(
++  "\nPublic reproducibility script completed.\n",
++  "R/session metadata saved to: ",
++  reproducibility_metadata_file,
++  "\n",
++  sep = ""
++)
++
